@@ -1,0 +1,12 @@
+dataset_name: TogogBali
+
+scenes:
+  - name: togog_ganesha
+    source: datasets/togog_bali/togog_ganesha
+    ground_truth: ground_truth/togog_bali/togog_ganesha.ply
+    output: output/togog_bali/togog_ganesha
+
+  - name: togog_siwa
+    source: datasets/togog_bali/togog_siwa
+    ground_truth: ground_truth/togog_bali/togog_siwa.ply
+    output: output/togog_bali/togog_siwa

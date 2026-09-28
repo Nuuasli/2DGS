@@ -12,3 +12,12 @@ data
 eval
 *.npz
 **/tmp
+datasets/
+ground_truth/
+research_results/logs/
+research_results/failed_runs.log
+.venv/
+venv/
+.idea/
+.DS_Store
+Thumbs.db

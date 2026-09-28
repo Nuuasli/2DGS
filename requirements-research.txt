@@ -1,0 +1,5 @@
+PyYAML
+nvidia-ml-py
+scipy
+
+# numpy and trimesh are reused from the original environment.yml.

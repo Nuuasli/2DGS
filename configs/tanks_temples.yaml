@@ -1,0 +1,7 @@
+dataset_name: TanksAndTemples
+
+scenes:
+  - name: barn
+    source: datasets/tanks_temples/barn
+    ground_truth: ground_truth/tanks_temples/barn.ply
+    output: output/tanks_temples/barn

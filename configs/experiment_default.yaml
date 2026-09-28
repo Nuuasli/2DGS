@@ -1,0 +1,26 @@
+experiment:
+  name: 2dgs_baseline
+  output_root: output
+  results_file: research_results/experiment_results.csv
+
+training:
+  iterations: 30000
+
+geometry_evaluation:
+  enabled: true
+  distance_threshold: null
+  sample_points: 100000
+
+metrics:
+  chamfer_distance: true
+  precision: true
+  recall: true
+  f1_score: true
+  ssim: true
+  psnr: true
+  lpips: true
+
+monitoring:
+  training_time: true
+  gpu_vram: true
+  gpu_sampling_interval_seconds: 0.5
