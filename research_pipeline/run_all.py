@@ -313,6 +313,7 @@ def main() -> int:
                 monitor = GPUVRAMMonitor(
                     float(monitoring.get("gpu_sampling_interval_seconds", 0.5))
                 )
+                monitor.prepare()
 
             training_started = time.perf_counter()
             try:
@@ -329,6 +330,12 @@ def main() -> int:
                 stats = monitor.stop() if monitor else VRAMStats(None, None)
                 row["peak_vram_mb"] = stats.peak_vram_mb
                 row["average_vram_mb"] = stats.average_vram_mb
+                if stats.mode is not None:
+                    LOGGER.info("VRAM monitoring mode: %s", stats.mode)
+                if stats.peak_vram_mb is not None:
+                    LOGGER.info("Peak VRAM: %.2f MiB", stats.peak_vram_mb)
+                if stats.average_vram_mb is not None:
+                    LOGGER.info("Average VRAM: %.2f MiB", stats.average_vram_mb)
 
             run_command(commands[1], cwd=repo_root)
 

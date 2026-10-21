@@ -102,6 +102,14 @@ Metrik efisiensi yang hanya mencakup proses `train.py`:
 - peak VRAM
 - average VRAM
 
+Monitoring VRAM mengutamakan penggunaan memory per-process dari NVML. Pada WSL,
+NVML dapat menemukan PID training tetapi mengembalikan penggunaan memory
+per-process yang tidak tersedia. Dalam kondisi tersebut pipeline memakai delta
+penggunaan VRAM device terhadap baseline yang direkam sebelum subprocess
+training diluncurkan. Device-level delta bukan pengukuran per-process yang
+identik dan dapat terpengaruh workload lain pada GPU yang sama. Eksperimen final
+sebaiknya dijalankan ketika tidak ada workload lain pada GPU yang digunakan.
+
 Precision, Recall, dan F1 membutuhkan `distance_threshold`. Nilai default tetap
 `null`; pipeline tidak menebak atau melakukan hardcode threshold. Dengan nilai
 tersebut, Chamfer Distance tetap dihitung sedangkan Precision, Recall, dan F1
