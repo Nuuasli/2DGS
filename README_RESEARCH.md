@@ -35,10 +35,20 @@ diizinkan.
 
 Semua command dijalankan dari root repository.
 
+`--config` memilih dataset/scene, sedangkan `--experiment-config` memilih
+parameter eksperimen. Jika `--experiment-config` tidak diberikan, pipeline
+otomatis memakai `configs/experiment_default.yaml`.
+
 Dry-run tanpa dataset, CUDA, GPU, atau submodule:
 
 ```bash
 python research_pipeline/run_all.py --config configs/togog_bali.yaml --dry-run
+```
+
+Dry-run smoke test 500 iterasi:
+
+```bash
+python research_pipeline/run_all.py --config configs/togog_tualen_smoke.yaml --experiment-config configs/experiment_smoke.yaml --scene togog_tualen --dry-run
 ```
 
 Menjalankan seluruh batch:

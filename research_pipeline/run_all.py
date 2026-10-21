@@ -177,7 +177,18 @@ def _log_dry_run_scene(
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--config", required=True, type=Path)
+    parser.add_argument(
+        "--config", required=True, type=Path, help="Dataset configuration YAML"
+    )
+    parser.add_argument(
+        "--experiment-config",
+        type=Path,
+        default=Path("configs/experiment_default.yaml"),
+        help=(
+            "Experiment configuration YAML "
+            "(default: configs/experiment_default.yaml)"
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--force", action="store_true")
@@ -193,16 +204,22 @@ def main() -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     repo_root = _repo_root()
-    global_config = load_yaml(repo_root / "configs" / "experiment_default.yaml")
+    experiment_config = load_yaml(_resolve_path(repo_root, args.experiment_config))
     dataset_config = load_yaml(_resolve_path(repo_root, args.config))
 
-    experiment = _require_mapping(global_config.get("experiment"), "experiment")
-    training = _require_mapping(global_config.get("training"), "training")
-    geometry_config = _require_mapping(
-        global_config.get("geometry_evaluation"), "geometry_evaluation"
+    experiment = _require_mapping(
+        experiment_config.get("experiment"), "experiment"
     )
-    metric_config = _require_mapping(global_config.get("metrics"), "metrics")
-    monitoring = _require_mapping(global_config.get("monitoring"), "monitoring")
+    training = _require_mapping(experiment_config.get("training"), "training")
+    geometry_config = _require_mapping(
+        experiment_config.get("geometry_evaluation"), "geometry_evaluation"
+    )
+    metric_config = _require_mapping(
+        experiment_config.get("metrics"), "metrics"
+    )
+    monitoring = _require_mapping(
+        experiment_config.get("monitoring"), "monitoring"
+    )
 
     dataset_name = str(dataset_config.get("dataset_name", "")).strip()
     if not dataset_name:

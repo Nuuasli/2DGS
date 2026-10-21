@@ -1,0 +1,26 @@
+experiment:
+  name: 2dgs_smoke_test
+  output_root: output
+  results_file: research_results/smoke_test_results.csv
+
+training:
+  iterations: 500
+
+geometry_evaluation:
+  enabled: false
+  distance_threshold: null
+  sample_points: 100000
+
+metrics:
+  chamfer_distance: false
+  precision: false
+  recall: false
+  f1_score: false
+  ssim: true
+  psnr: true
+  lpips: true
+
+monitoring:
+  training_time: true
+  gpu_vram: true
+  gpu_sampling_interval_seconds: 0.5

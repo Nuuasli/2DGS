@@ -1,0 +1,7 @@
+dataset_name: TogogBaliSmoke
+
+scenes:
+  - name: togog_tualen
+    source: datasets/togog_bali/togog_tualen
+    ground_truth: ground_truth/togog_bali/togog_tualen.ply
+    output: output/smoke_test/togog_tualen
