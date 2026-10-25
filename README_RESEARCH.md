@@ -81,6 +81,53 @@ python research_pipeline/run_all.py --config configs/togog_bali.yaml --scene tog
 
 `--resume` dan `--force` tidak dapat digunakan bersamaan.
 
+## Persiapan COLMAP Opsional
+
+Pipeline dapat mengorkestrasi `convert.py` original sebelum eksperimen. Tahap
+ini hanya menjalankan dan memvalidasi COLMAP; tidak melakukan blur detection,
+image-quality filtering, enhancement, cropping, duplicate detection, atau
+background removal.
+
+Experiment saja, tanpa preprocessing otomatis:
+
+```bash
+python research_pipeline/run_all.py --config configs/togog_bali.yaml --experiment-config configs/experiment_default.yaml
+```
+
+Prepare seluruh scene, kemudian jalankan experiment:
+
+```bash
+python research_pipeline/run_all.py --config configs/togog_bali.yaml --experiment-config configs/experiment_default.yaml --prepare
+```
+
+Workflow incremental untuk dataset yang bertambah:
+
+```bash
+python research_pipeline/run_all.py --config configs/togog_bali.yaml --experiment-config configs/experiment_default.yaml --prepare --resume
+```
+
+Scene yang sudah memiliki `images/` berisi gambar serta model
+`sparse/0/{cameras.bin,images.bin,points3D.bin}` dilewati. Scene baru disiapkan
+lebih dahulu; setelah seluruh preparation valid, semantics `--resume` tetap
+melewati experiment scene lama yang sudah sukses.
+
+`--force` hanya meminta experiment/training dijalankan ulang dan tidak
+menjalankan ulang COLMAP. `--force-preprocess` hanya berlaku bersama `--prepare`
+atau `--prepare-only`. Karena `convert.py` tidak aman dijalankan di atas output
+existing tanpa cleanup, pipeline menolak forced rerun untuk scene prepared atau
+partial dan tidak pernah menghapus `input/`, `images/`, `sparse/`, maupun
+`distorted/` secara otomatis.
+
+Untuk hanya mempersiapkan atau memvalidasi dataset tanpa training:
+
+```bash
+python research_pipeline/run_all.py --config configs/togog_bali.yaml --prepare-only
+```
+
+`--prepare --dry-run` hanya menampilkan status dan command `convert.py` yang
+akan dijalankan, kemudian menampilkan command experiment. Tidak ada file yang
+dibuat atau diubah.
+
 ## Metrik
 
 Metrik geometri:

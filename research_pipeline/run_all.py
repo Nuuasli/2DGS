@@ -24,6 +24,12 @@ from research_pipeline.pipeline_utils import (
     read_2dgs_metrics,
     run_command,
 )
+from research_pipeline.preprocess import (
+    PreparationAction,
+    PreparationResult,
+    PreparationStatus,
+    prepare_scene,
+)
 from research_pipeline.result_logger import ResultLogger, read_successful_scenes
 
 LOGGER = logging.getLogger(__name__)
@@ -175,6 +181,69 @@ def _log_dry_run_scene(
         run_command(command, cwd=_repo_root(), dry_run=True)
 
 
+def _run_preparation_phase(
+    repo_root: Path,
+    scenes: Sequence[Mapping[str, Any]],
+    dry_run: bool,
+    force_preprocess: bool,
+) -> bool:
+    """Prepare all selected scenes before allowing the experiment phase."""
+
+    LOGGER.info("=== Dataset Preparation ===")
+    results: List[PreparationResult] = []
+    for index, scene in enumerate(scenes, start=1):
+        scene_name = str(scene["name"])
+        source_path = _resolve_path(repo_root, scene["source"])
+        LOGGER.info("[PREPARE %d/%d] %s", index, len(scenes), scene_name)
+        try:
+            result = prepare_scene(
+                scene_name,
+                source_path,
+                repo_root,
+                dry_run=dry_run,
+                force_preprocess=force_preprocess,
+            )
+        except Exception as exc:
+            result = PreparationResult(
+                scene_name,
+                PreparationStatus.PARTIAL,
+                PreparationAction.FAILED,
+                False,
+                "Unexpected preparation validation error: {}".format(exc),
+            )
+        results.append(result)
+        LOGGER.info("Status: %s", result.initial_status.value)
+        LOGGER.info("Action: %s", result.action.value)
+        LOGGER.info("Result: %s", result.message)
+
+    already_prepared = sum(
+        result.action == PreparationAction.ALREADY_PREPARED for result in results
+    )
+    prepared_now = sum(
+        result.action == PreparationAction.PREPARED_NOW for result in results
+    )
+    would_prepare = sum(
+        result.action == PreparationAction.WOULD_PREPARE for result in results
+    )
+    failed = [result for result in results if not result.success]
+    LOGGER.info("Preparation summary:")
+    LOGGER.info("Already prepared: %d", already_prepared)
+    LOGGER.info("Prepared now: %d", prepared_now)
+    if dry_run:
+        LOGGER.info("Would prepare: %d", would_prepare)
+    LOGGER.info("Failed: %d", len(failed))
+
+    if failed:
+        LOGGER.error(
+            "Dataset preparation failed for %d scene(s):", len(failed)
+        )
+        for result in failed:
+            LOGGER.error("- %s: %s", result.scene, result.message)
+        LOGGER.error("No training was started.")
+        return False
+    return True
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -192,6 +261,21 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Validate/prepare all selected scenes with the original convert.py",
+    )
+    parser.add_argument(
+        "--prepare-only",
+        action="store_true",
+        help="Run dataset preparation/validation and exit without experiments",
+    )
+    parser.add_argument(
+        "--force-preprocess",
+        action="store_true",
+        help="Request preprocessing again without automatic cleanup",
+    )
     parser.add_argument("--scene", help="Run only the named scene")
     return parser
 
@@ -201,6 +285,8 @@ def main() -> int:
     args = parser.parse_args()
     if args.resume and args.force:
         parser.error("--resume and --force cannot be used together")
+    if args.force_preprocess and not (args.prepare or args.prepare_only):
+        parser.error("--force-preprocess requires --prepare or --prepare-only")
 
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     repo_root = _repo_root()
@@ -232,11 +318,38 @@ def main() -> int:
         if not scenes:
             parser.error("scene '{}' is not present in {}".format(args.scene, args.config))
 
+    validated_scenes = []
+    for scene in scenes:
+        scene_data = _require_mapping(scene, "scene entry")
+        scene_name = str(scene_data.get("name", "")).strip()
+        if not scene_name:
+            raise ValueError("Each scene requires a non-empty name")
+        if "source" not in scene_data:
+            raise ValueError("Scene '{}' requires a source path".format(scene_name))
+        validated_scenes.append(scene_data)
+    scenes = validated_scenes
+
     iterations = int(training.get("iterations", 30_000))
     threshold_value = geometry_config.get("distance_threshold")
     threshold = None if threshold_value is None else float(threshold_value)
     sample_points = int(geometry_config.get("sample_points", 100_000))
     results_path = _resolve_path(repo_root, experiment["results_file"])
+
+    LOGGER.info("Dataset: %s", dataset_name)
+    LOGGER.info("Scenes selected: %d", len(scenes))
+    if args.prepare or args.prepare_only:
+        preparation_succeeded = _run_preparation_phase(
+            repo_root,
+            scenes,
+            dry_run=args.dry_run,
+            force_preprocess=args.force_preprocess,
+        )
+        if not preparation_succeeded:
+            return 1
+        if args.prepare_only:
+            LOGGER.info("Preparation-only mode complete; no training was started.")
+            return 0
+
     successful = (
         read_successful_scenes(results_path, dataset_name) if args.resume else set()
     )
@@ -258,16 +371,13 @@ def main() -> int:
     git_commit = get_git_commit(repo_root)
     failures = 0
 
-    LOGGER.info("Dataset: %s", dataset_name)
-    LOGGER.info("Scenes selected: %d", len(scenes))
+    LOGGER.info("=== Experiment Phase ===")
     if args.dry_run:
         LOGGER.info("[DRY RUN] No training, rendering, metrics, or evaluation will run.")
 
     for index, scene in enumerate(scenes, start=1):
-        scene_data = _require_mapping(scene, "scene entry")
-        scene_name = str(scene_data.get("name", "")).strip()
-        if not scene_name:
-            raise ValueError("Each scene requires a non-empty name")
+        scene_data = scene
+        scene_name = str(scene_data["name"])
         if args.resume and scene_name in successful:
             LOGGER.info("Skipping successful scene due to --resume: %s", scene_name)
             continue
