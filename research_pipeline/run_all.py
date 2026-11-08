@@ -113,6 +113,7 @@ def _build_commands(
     output_path: Path,
     iterations: int,
     init_ply: Optional[Path] = None,
+    geometry_enabled: bool = True,
 ) -> Tuple[List[str], List[str], List[str]]:
     python = sys.executable
     train = [
@@ -139,6 +140,8 @@ def _build_commands(
         str(iterations),
         "--skip_train",
     ]
+    if not geometry_enabled:
+        render.append("--skip_mesh")
     metrics = [
         python,
         str(repo_root / "metrics.py"),
@@ -422,6 +425,7 @@ def main() -> int:
     threshold_value = geometry_config.get("distance_threshold")
     threshold = None if threshold_value is None else float(threshold_value)
     sample_points = int(geometry_config.get("sample_points", 100_000))
+    geometry_enabled = bool(geometry_config.get("enabled", True))
     results_path = _resolve_path(repo_root, experiment["results_file"])
 
     LOGGER.info("Dataset: %s", dataset_name)
@@ -525,7 +529,12 @@ def main() -> int:
                 init_ply = initialization.output_ply
 
         commands = _build_commands(
-            repo_root, source_path, output_path, iterations, init_ply=init_ply
+            repo_root,
+            source_path,
+            output_path,
+            iterations,
+            init_ply=init_ply,
+            geometry_enabled=geometry_enabled,
         )
 
         if args.dry_run:
@@ -611,6 +620,7 @@ def main() -> int:
                     output_path,
                     iterations,
                     init_ply=init_ply,
+                    geometry_enabled=geometry_enabled,
                 )
 
             current_stage = "2dgs_training"
@@ -674,7 +684,7 @@ def main() -> int:
                     if bool(metric_config.get(metric_name, True)):
                         row[metric_name] = image_metrics.get(metric_name)
 
-            if bool(geometry_config.get("enabled", True)):
+            if geometry_enabled:
                 current_stage = "geometry_evaluation"
                 reconstructed_mesh = _find_reconstructed_mesh(output_path, iterations)
                 geometry_metrics = evaluate_geometry(

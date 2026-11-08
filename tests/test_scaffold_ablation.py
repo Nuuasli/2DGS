@@ -302,6 +302,30 @@ class ScaffoldAblationTests(unittest.TestCase):
         index = train.index("--init_ply")
         self.assertEqual(train[index + 1], "initial_points.ply")
 
+    def test_geometry_disabled_render_command_skips_mesh(self) -> None:
+        train, render, _ = _build_commands(
+            REPO_ROOT,
+            Path("source"),
+            Path("output"),
+            30000,
+            init_ply=Path("initial_points.ply"),
+            geometry_enabled=False,
+        )
+        self.assertIn("--init_ply", train)
+        self.assertIn("--skip_mesh", render)
+
+    def test_geometry_enabled_render_command_keeps_mesh(self) -> None:
+        train, render, _ = _build_commands(
+            REPO_ROOT,
+            Path("source"),
+            Path("output"),
+            30000,
+            init_ply=Path("initial_points.ply"),
+            geometry_enabled=True,
+        )
+        self.assertIn("--init_ply", train)
+        self.assertNotIn("--skip_mesh", render)
+
     def test_2dgs_model_cli_accepts_init_ply(self) -> None:
         parser = ArgumentParser()
         model_params = ModelParams(parser)
