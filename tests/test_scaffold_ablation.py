@@ -25,6 +25,7 @@ from research_pipeline.gpu_monitor import VRAMStats
 from research_pipeline.run_all import (
     _build_commands,
     _initialization_method,
+    _resolve_stage_enablement,
     _scene_output_path,
 )
 from research_pipeline.scaffold_init import (
@@ -302,29 +303,85 @@ class ScaffoldAblationTests(unittest.TestCase):
         index = train.index("--init_ply")
         self.assertEqual(train[index + 1], "initial_points.ply")
 
-    def test_geometry_disabled_render_command_skips_mesh(self) -> None:
+    def test_mesh_enabled_geometry_disabled_keeps_mesh_without_evaluation(self) -> None:
+        config = {
+            "mesh_extraction": {"enabled": True},
+            "geometry_evaluation": {"enabled": False},
+        }
+        geometry_enabled, mesh_enabled = _resolve_stage_enablement(
+            config, config["geometry_evaluation"]
+        )
         train, render, _ = _build_commands(
             REPO_ROOT,
             Path("source"),
             Path("output"),
             30000,
             init_ply=Path("initial_points.ply"),
-            geometry_enabled=False,
+            mesh_extraction_enabled=mesh_enabled,
         )
+        self.assertFalse(geometry_enabled)
+        self.assertIn("--init_ply", train)
+        self.assertNotIn("--skip_mesh", render)
+
+    def test_mesh_disabled_geometry_disabled_skips_mesh(self) -> None:
+        config = {
+            "mesh_extraction": {"enabled": False},
+            "geometry_evaluation": {"enabled": False},
+        }
+        geometry_enabled, mesh_enabled = _resolve_stage_enablement(
+            config, config["geometry_evaluation"]
+        )
+        train, render, _ = _build_commands(
+            REPO_ROOT,
+            Path("source"),
+            Path("output"),
+            30000,
+            init_ply=Path("initial_points.ply"),
+            mesh_extraction_enabled=mesh_enabled,
+        )
+        self.assertFalse(geometry_enabled)
         self.assertIn("--init_ply", train)
         self.assertIn("--skip_mesh", render)
 
-    def test_geometry_enabled_render_command_keeps_mesh(self) -> None:
+    def test_mesh_enabled_geometry_enabled_runs_both_stages(self) -> None:
+        config = {
+            "mesh_extraction": {"enabled": True},
+            "geometry_evaluation": {"enabled": True},
+        }
+        geometry_enabled, mesh_enabled = _resolve_stage_enablement(
+            config, config["geometry_evaluation"]
+        )
         train, render, _ = _build_commands(
             REPO_ROOT,
             Path("source"),
             Path("output"),
             30000,
             init_ply=Path("initial_points.ply"),
-            geometry_enabled=True,
+            mesh_extraction_enabled=mesh_enabled,
         )
+        self.assertTrue(geometry_enabled)
         self.assertIn("--init_ply", train)
         self.assertNotIn("--skip_mesh", render)
+
+    def test_mesh_disabled_geometry_enabled_is_configuration_error(self) -> None:
+        config = {
+            "mesh_extraction": {"enabled": False},
+            "geometry_evaluation": {"enabled": True},
+        }
+        with self.assertRaisesRegex(
+            ValueError,
+            "geometry_evaluation.enabled=true requires "
+            "mesh_extraction.enabled=true",
+        ):
+            _resolve_stage_enablement(config, config["geometry_evaluation"])
+
+    def test_legacy_config_defaults_to_mesh_extraction_enabled(self) -> None:
+        geometry_config = {"enabled": False}
+        geometry_enabled, mesh_enabled = _resolve_stage_enablement(
+            {"geometry_evaluation": geometry_config}, geometry_config
+        )
+        self.assertFalse(geometry_enabled)
+        self.assertTrue(mesh_enabled)
 
     def test_2dgs_model_cli_accepts_init_ply(self) -> None:
         parser = ArgumentParser()

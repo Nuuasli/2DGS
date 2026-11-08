@@ -19,6 +19,9 @@ scaffold:
 training:
   iterations: 30000
 
+mesh_extraction:
+  enabled: true
+
 geometry_evaluation:
   enabled: false
   distance_threshold: null

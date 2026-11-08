@@ -68,6 +68,30 @@ def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
     return value
 
 
+def _resolve_stage_enablement(
+    experiment_config: Mapping[str, Any],
+    geometry_config: Mapping[str, Any],
+) -> Tuple[bool, bool]:
+    """Return geometry/mesh flags and reject an impossible configuration."""
+
+    geometry_enabled = bool(geometry_config.get("enabled", True))
+    mesh_value = experiment_config.get("mesh_extraction")
+    if mesh_value is None:
+        # Legacy configs predate this section and historically generated meshes.
+        mesh_enabled = True
+    else:
+        mesh_config = _require_mapping(mesh_value, "mesh_extraction")
+        mesh_enabled = bool(mesh_config.get("enabled", True))
+
+    if geometry_enabled and not mesh_enabled:
+        raise ValueError(
+            "geometry_evaluation.enabled=true requires "
+            "mesh_extraction.enabled=true because geometry evaluation needs "
+            "a reconstructed mesh"
+        )
+    return geometry_enabled, mesh_enabled
+
+
 def _initialization_method(experiment_config: Mapping[str, Any]) -> str:
     """Return the configured initialization without changing legacy configs."""
 
@@ -113,7 +137,7 @@ def _build_commands(
     output_path: Path,
     iterations: int,
     init_ply: Optional[Path] = None,
-    geometry_enabled: bool = True,
+    mesh_extraction_enabled: bool = True,
 ) -> Tuple[List[str], List[str], List[str]]:
     python = sys.executable
     train = [
@@ -140,7 +164,7 @@ def _build_commands(
         str(iterations),
         "--skip_train",
     ]
-    if not geometry_enabled:
+    if not mesh_extraction_enabled:
         render.append("--skip_mesh")
     metrics = [
         python,
@@ -377,6 +401,9 @@ def main() -> int:
     geometry_config = _require_mapping(
         experiment_config.get("geometry_evaluation"), "geometry_evaluation"
     )
+    geometry_enabled, mesh_extraction_enabled = _resolve_stage_enablement(
+        experiment_config, geometry_config
+    )
     metric_config = _require_mapping(
         experiment_config.get("metrics"), "metrics"
     )
@@ -425,7 +452,6 @@ def main() -> int:
     threshold_value = geometry_config.get("distance_threshold")
     threshold = None if threshold_value is None else float(threshold_value)
     sample_points = int(geometry_config.get("sample_points", 100_000))
-    geometry_enabled = bool(geometry_config.get("enabled", True))
     results_path = _resolve_path(repo_root, experiment["results_file"])
 
     LOGGER.info("Dataset: %s", dataset_name)
@@ -534,7 +560,7 @@ def main() -> int:
             output_path,
             iterations,
             init_ply=init_ply,
-            geometry_enabled=geometry_enabled,
+            mesh_extraction_enabled=mesh_extraction_enabled,
         )
 
         if args.dry_run:
@@ -620,7 +646,7 @@ def main() -> int:
                     output_path,
                     iterations,
                     init_ply=init_ply,
-                    geometry_enabled=geometry_enabled,
+                    mesh_extraction_enabled=mesh_extraction_enabled,
                 )
 
             current_stage = "2dgs_training"
