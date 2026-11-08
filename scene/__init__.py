@@ -12,8 +12,10 @@
 import os
 import random
 import json
+import shutil
+import numpy as np
 from utils.system_utils import searchForMaxIteration
-from scene.dataset_readers import sceneLoadTypeCallbacks
+from scene.dataset_readers import fetchPly, sceneLoadTypeCallbacks
 from scene.gaussian_model import GaussianModel
 from arguments import ModelParams
 from utils.camera_utils import cameraList_from_camInfos, camera_to_JSON
@@ -48,9 +50,52 @@ class Scene:
         else:
             assert False, "Could not recognize scene type!"
 
+        initialization_pcd = scene_info.point_cloud
+        initialization_ply = scene_info.ply_path
+        init_ply_arg = getattr(args, "init_ply", None)
+        using_external_initialization = bool(init_ply_arg)
+        if not self.loaded_iter and init_ply_arg:
+            initialization_ply = os.path.abspath(init_ply_arg)
+            if not os.path.isfile(initialization_ply):
+                raise FileNotFoundError(
+                    "External initialization PLY not found: {}".format(
+                        initialization_ply
+                    )
+                )
+            try:
+                initialization_pcd = fetchPly(initialization_ply)
+            except Exception as exc:
+                raise ValueError(
+                    "Unable to load external initialization PLY '{}': {}".format(
+                        initialization_ply, exc
+                    )
+                ) from exc
+            points = np.asarray(initialization_pcd.points)
+            if (
+                points.ndim != 2
+                or points.shape[1] != 3
+                or len(points) == 0
+                or not np.isfinite(points).all()
+            ):
+                raise ValueError(
+                    "External initialization PLY must contain finite XYZ points: "
+                    "{}".format(initialization_ply)
+                )
+            print(
+                "Using external initialization point cloud: {} ({} points)".format(
+                    initialization_ply, len(points)
+                )
+            )
+
         if not self.loaded_iter:
-            with open(scene_info.ply_path, 'rb') as src_file, open(os.path.join(self.model_path, "input.ply") , 'wb') as dest_file:
-                dest_file.write(src_file.read())
+            input_ply = os.path.join(self.model_path, "input.ply")
+            if using_external_initialization:
+                shutil.copyfile(initialization_ply, input_ply)
+            else:
+                with open(scene_info.ply_path, 'rb') as src_file, open(
+                    input_ply, 'wb'
+                ) as dest_file:
+                    dest_file.write(src_file.read())
             json_cams = []
             camlist = []
             if scene_info.test_cameras:
@@ -80,7 +125,7 @@ class Scene:
                                                            "iteration_" + str(self.loaded_iter),
                                                            "point_cloud.ply"))
         else:
-            self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent)
+            self.gaussians.create_from_pcd(initialization_pcd, self.cameras_extent)
 
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))

@@ -20,6 +20,11 @@ docs/research_notes.md      Catatan metodologi dan eksperimen
 requirements-research.txt   Dependency tambahan pipeline
 ```
 
+Studi ablasi inisialisasi anchor Scaffold-GS didokumentasikan terpisah di
+[`docs/scaffold_ablation.md`](docs/scaffold_ablation.md). Ablasi tersebut tetap
+melatih dan mengevaluasi 2DGS; Scaffold-GS hanya menyediakan point cloud
+inisialisasi eksternal melalui hook `--init_ply`.
+
 Setiap scene langsung menghasilkan satu row di
 `research_results/experiment_results.csv`, termasuk ketika scene gagal. Batch
 melanjutkan scene berikutnya setelah kegagalan.
@@ -76,7 +81,7 @@ directory lama; pengelolaan output lama tetap dilakukan secara manual.
 Menjalankan satu scene:
 
 ```bash
-python research_pipeline/run_all.py --config configs/togog_bali.yaml --scene togog_ganesha
+python research_pipeline/run_all.py --config configs/togog_bali.yaml --scene ganesha
 ```
 
 `--resume` dan `--force` tidak dapat digunakan bersamaan.

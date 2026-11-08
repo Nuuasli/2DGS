@@ -30,7 +30,16 @@ from research_pipeline.preprocess import (
     PreparationStatus,
     prepare_scene,
 )
-from research_pipeline.result_logger import ResultLogger, read_successful_scenes
+from research_pipeline.result_logger import (
+    SCAFFOLD_CSV_FIELDS,
+    ResultLogger,
+    read_successful_scenes,
+)
+from research_pipeline.scaffold_init import (
+    INITIALIZATION_METHOD,
+    create_scaffold_initialization,
+)
+from research_pipeline.scaffold_runner import run_scaffold_stage
 
 LOGGER = logging.getLogger(__name__)
 
@@ -59,11 +68,51 @@ def _require_mapping(value: Any, label: str) -> Mapping[str, Any]:
     return value
 
 
+def _initialization_method(experiment_config: Mapping[str, Any]) -> str:
+    """Return the configured initialization without changing legacy configs."""
+
+    value = experiment_config.get("initialization")
+    if value is None:
+        return "colmap"
+    config = _require_mapping(value, "initialization")
+    method = str(config.get("method", "colmap")).strip().lower()
+    if method not in ("colmap", INITIALIZATION_METHOD):
+        raise ValueError("Unsupported initialization.method: {}".format(method))
+    return method
+
+
+def _dataset_namespace(source_path: Path) -> str:
+    """Derive a generic dataset directory from a scene source path."""
+
+    namespace = source_path.parent.name.strip()
+    if not namespace:
+        raise ValueError(
+            "Unable to derive dataset output namespace from {}".format(source_path)
+        )
+    return namespace
+
+
+def _scene_output_path(
+    repo_root: Path,
+    experiment: Mapping[str, Any],
+    scene: Mapping[str, Any],
+    source_path: Path,
+    initialization_method: str,
+) -> Path:
+    """Keep legacy scene output paths; isolate non-baseline ablation output."""
+
+    if initialization_method != INITIALIZATION_METHOD:
+        return _resolve_path(repo_root, scene["output"])
+    output_root = _resolve_path(repo_root, experiment["output_root"])
+    return output_root / _dataset_namespace(source_path) / str(scene["name"])
+
+
 def _build_commands(
     repo_root: Path,
     source_path: Path,
     output_path: Path,
     iterations: int,
+    init_ply: Optional[Path] = None,
 ) -> Tuple[List[str], List[str], List[str]]:
     python = sys.executable
     train = [
@@ -77,6 +126,8 @@ def _build_commands(
         str(iterations),
         "--eval",
     ]
+    if init_ply is not None:
+        train.extend(["--init_ply", str(init_ply)])
     render = [
         python,
         str(repo_root / "render.py"),
@@ -130,8 +181,9 @@ def _new_result_row(
     git_commit: str,
     threshold: Optional[float],
     geometry_sample_points: int,
+    initialization_method: str = "colmap",
 ) -> Dict[str, Any]:
-    return {
+    row = {
         "run_id": str(uuid.uuid4()),
         "dataset": dataset,
         "scene": scene,
@@ -155,6 +207,22 @@ def _new_result_row(
         "output_path": output_path,
         "error": None,
     }
+    if initialization_method == INITIALIZATION_METHOD:
+        row.update(
+            {
+                "initialization_method": INITIALIZATION_METHOD,
+                "scaffold_iterations": None,
+                "scaffold_training_seconds": None,
+                "scaffold_peak_vram_mb": None,
+                "scaffold_average_vram_mb": None,
+                "scaffold_anchor_count": None,
+                "scaffold_commit": None,
+                "scaffold_reused": None,
+                "init_ply": None,
+                "total_ablation_seconds": None,
+            }
+        )
+    return row
 
 
 def _log_dry_run_scene(
@@ -168,6 +236,8 @@ def _log_dry_run_scene(
     commands: Sequence[Sequence[str]],
     expected_mesh: Path,
     threshold: Optional[float],
+    scaffold_output: Optional[Path] = None,
+    init_ply: Optional[Path] = None,
 ) -> None:
     LOGGER.info("[DRY RUN] Dataset: %s", dataset)
     LOGGER.info("[DRY RUN] Scene %d/%d: %s", index, total, scene_name)
@@ -176,6 +246,10 @@ def _log_dry_run_scene(
     LOGGER.info("[DRY RUN] Output: %s", output_path)
     LOGGER.info("[DRY RUN] Expected mesh: %s", expected_mesh)
     LOGGER.info("[DRY RUN] Distance threshold: %s", threshold)
+    if scaffold_output is not None:
+        LOGGER.info("[DRY RUN] Scaffold output: %s", scaffold_output)
+    if init_ply is not None:
+        LOGGER.info("[DRY RUN] Scaffold initialization PLY: %s", init_ply)
     for label, command in zip(("Training", "Rendering", "Metrics"), commands):
         LOGGER.info("[DRY RUN] %s:", label)
         run_command(command, cwd=_repo_root(), dry_run=True)
@@ -306,6 +380,21 @@ def main() -> int:
     monitoring = _require_mapping(
         experiment_config.get("monitoring"), "monitoring"
     )
+    initialization_method = _initialization_method(experiment_config)
+    scaffold_value = experiment_config.get("scaffold")
+    scaffold_config: Optional[Mapping[str, Any]] = None
+    if initialization_method == INITIALIZATION_METHOD:
+        scaffold_config = _require_mapping(scaffold_value, "scaffold")
+        if not bool(scaffold_config.get("enabled", False)):
+            raise ValueError(
+                "initialization.method=scaffold_anchor requires scaffold.enabled=true"
+            )
+    elif isinstance(scaffold_value, Mapping) and bool(
+        scaffold_value.get("enabled", False)
+    ):
+        raise ValueError(
+            "scaffold.enabled=true requires initialization.method=scaffold_anchor"
+        )
 
     dataset_name = str(dataset_config.get("dataset_name", "")).strip()
     if not dataset_name:
@@ -337,6 +426,7 @@ def main() -> int:
 
     LOGGER.info("Dataset: %s", dataset_name)
     LOGGER.info("Scenes selected: %d", len(scenes))
+    LOGGER.info("Initialization method: %s", initialization_method)
     if args.prepare or args.prepare_only:
         preparation_succeeded = _run_preparation_phase(
             repo_root,
@@ -357,7 +447,14 @@ def main() -> int:
         result_logger = None
     else:
         try:
-            result_logger = ResultLogger(results_path)
+            result_logger = ResultLogger(
+                results_path,
+                extra_fields=(
+                    SCAFFOLD_CSV_FIELDS
+                    if initialization_method == INITIALIZATION_METHOD
+                    else ()
+                ),
+            )
         except Exception as exc:
             LOGGER.critical(
                 "Unable to initialize master results CSV %s: %s. "
@@ -384,8 +481,52 @@ def main() -> int:
 
         source_path = _resolve_path(repo_root, scene_data["source"])
         ground_truth_path = _resolve_path(repo_root, scene_data["ground_truth"])
-        output_path = _resolve_path(repo_root, scene_data["output"])
-        commands = _build_commands(repo_root, source_path, output_path, iterations)
+        output_path = _scene_output_path(
+            repo_root,
+            experiment,
+            scene_data,
+            source_path,
+            initialization_method,
+        )
+        scaffold_output: Optional[Path] = None
+        init_ply: Optional[Path] = None
+        if initialization_method == INITIALIZATION_METHOD:
+            assert scaffold_config is not None
+            scaffold_output_root = _resolve_path(
+                repo_root, scaffold_config["output_root"]
+            )
+            scaffold_output = (
+                scaffold_output_root
+                / _dataset_namespace(source_path)
+                / scene_name
+            )
+            if args.dry_run:
+                scaffold_stage = run_scaffold_stage(
+                    repo_root,
+                    scene_name,
+                    source_path,
+                    scaffold_output,
+                    scaffold_config,
+                    monitoring,
+                    dry_run=True,
+                )
+                initialization = create_scaffold_initialization(
+                    repo_root,
+                    source_path,
+                    scaffold_stage.point_cloud,
+                    scaffold_output,
+                    scaffold_stage.iterations,
+                    scaffold_stage.scaffold_commit,
+                    reuse_successful=bool(
+                        scaffold_config.get("reuse_successful", True)
+                    ),
+                    dry_run=True,
+                )
+                init_ply = initialization.output_ply
+
+        commands = _build_commands(
+            repo_root, source_path, output_path, iterations, init_ply=init_ply
+        )
 
         if args.dry_run:
             _log_dry_run_scene(
@@ -399,6 +540,8 @@ def main() -> int:
                 commands,
                 _expected_mesh_path(output_path, iterations),
                 threshold,
+                scaffold_output=scaffold_output,
+                init_ply=init_ply,
             )
             continue
 
@@ -411,13 +554,66 @@ def main() -> int:
             git_commit,
             threshold,
             sample_points,
+            initialization_method,
         )
         monitor: Optional[GPUVRAMMonitor] = None
+        current_stage = (
+            "scaffold_training"
+            if initialization_method == INITIALIZATION_METHOD
+            else "2dgs_training"
+        )
         try:
             if not source_path.is_dir():
                 raise FileNotFoundError(
                     "Dataset source directory not found: {}".format(source_path)
                 )
+
+            if initialization_method == INITIALIZATION_METHOD:
+                assert scaffold_config is not None
+                assert scaffold_output is not None
+                scaffold_stage = run_scaffold_stage(
+                    repo_root,
+                    scene_name,
+                    source_path,
+                    scaffold_output,
+                    scaffold_config,
+                    monitoring,
+                )
+                row["scaffold_iterations"] = scaffold_stage.iterations
+                row["scaffold_training_seconds"] = (
+                    scaffold_stage.training_seconds
+                )
+                row["scaffold_peak_vram_mb"] = scaffold_stage.peak_vram_mb
+                row["scaffold_average_vram_mb"] = (
+                    scaffold_stage.average_vram_mb
+                )
+                row["scaffold_commit"] = scaffold_stage.scaffold_commit
+                row["scaffold_reused"] = scaffold_stage.reused
+
+                current_stage = "scaffold_initialization"
+                initialization = create_scaffold_initialization(
+                    repo_root,
+                    source_path,
+                    scaffold_stage.point_cloud,
+                    scaffold_output,
+                    scaffold_stage.iterations,
+                    scaffold_stage.scaffold_commit,
+                    reuse_successful=bool(
+                        scaffold_config.get("reuse_successful", True)
+                    ),
+                )
+                init_ply = initialization.output_ply
+                row["scaffold_anchor_count"] = initialization.anchor_count
+                row["init_ply"] = _path_for_record(repo_root, init_ply)
+                commands = _build_commands(
+                    repo_root,
+                    source_path,
+                    output_path,
+                    iterations,
+                    init_ply=init_ply,
+                )
+
+            current_stage = "2dgs_training"
 
             if bool(monitoring.get("gpu_vram", True)):
                 monitor = GPUVRAMMonitor(
@@ -447,6 +643,7 @@ def main() -> int:
                 if stats.average_vram_mb is not None:
                     LOGGER.info("Average VRAM: %.2f MiB", stats.average_vram_mb)
 
+            current_stage = "render"
             run_command(commands[1], cwd=repo_root)
 
             image_metrics_enabled = any(
@@ -454,6 +651,7 @@ def main() -> int:
                 for name in ("ssim", "psnr", "lpips")
             )
             if image_metrics_enabled:
+                current_stage = "metrics"
                 results_json = output_path / "results.json"
                 previous_mtime_ns = (
                     results_json.stat().st_mtime_ns if results_json.exists() else None
@@ -477,6 +675,7 @@ def main() -> int:
                         row[metric_name] = image_metrics.get(metric_name)
 
             if bool(geometry_config.get("enabled", True)):
+                current_stage = "geometry_evaluation"
                 reconstructed_mesh = _find_reconstructed_mesh(output_path, iterations)
                 geometry_metrics = evaluate_geometry(
                     reconstructed_mesh,
@@ -498,9 +697,18 @@ def main() -> int:
         except Exception as exc:
             failures += 1
             row["status"] = "failed"
-            row["error"] = "{}: {}".format(type(exc).__name__, exc)
-            LOGGER.exception("Scene failed: %s", scene_name)
+            row["error"] = "{}: {}: {}".format(
+                current_stage, type(exc).__name__, exc
+            )
+            LOGGER.exception("Scene failed at %s: %s", current_stage, scene_name)
         finally:
+            if initialization_method == INITIALIZATION_METHOD:
+                scaffold_seconds = row.get("scaffold_training_seconds")
+                training_seconds = row.get("training_seconds")
+                if scaffold_seconds is not None and training_seconds is not None:
+                    row["total_ablation_seconds"] = round(
+                        float(scaffold_seconds) + float(training_seconds), 6
+                    )
             row["timestamp"] = datetime.now(timezone.utc).isoformat()
             if result_logger is not None:
                 try:

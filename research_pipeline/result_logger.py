@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import os
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Set, Union
+from typing import Any, Mapping, Sequence, Set, Union
 
 CSV_FIELDS = [
     "run_id",
@@ -32,12 +32,33 @@ CSV_FIELDS = [
     "error",
 ]
 
+SCAFFOLD_CSV_FIELDS = [
+    "initialization_method",
+    "scaffold_iterations",
+    "scaffold_training_seconds",
+    "scaffold_peak_vram_mb",
+    "scaffold_average_vram_mb",
+    "scaffold_anchor_count",
+    "scaffold_commit",
+    "scaffold_reused",
+    "init_ply",
+    "total_ablation_seconds",
+]
+
 
 class ResultLogger:
     """Create a result CSV when needed and append rows without buffering them."""
 
-    def __init__(self, csv_path: Union[str, Path]) -> None:
+    def __init__(
+        self,
+        csv_path: Union[str, Path],
+        extra_fields: Sequence[str] = (),
+    ) -> None:
         self.csv_path = Path(csv_path)
+        duplicate_fields = set(CSV_FIELDS).intersection(extra_fields)
+        if duplicate_fields or len(set(extra_fields)) != len(extra_fields):
+            raise ValueError("Result CSV fields must be unique")
+        self.fieldnames = [*CSV_FIELDS, *extra_fields]
         self.csv_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_header()
 
@@ -45,7 +66,7 @@ class ResultLogger:
         if self.csv_path.exists() and self.csv_path.stat().st_size > 0:
             return
         with self.csv_path.open("w", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+            writer = csv.DictWriter(handle, fieldnames=self.fieldnames)
             writer.writeheader()
             handle.flush()
             os.fsync(handle.fileno())
@@ -53,16 +74,16 @@ class ResultLogger:
     def append(self, result: Mapping[str, Any]) -> None:
         """Append and immediately flush a scene result to disk."""
 
-        unknown_fields = set(result) - set(CSV_FIELDS)
+        unknown_fields = set(result) - set(self.fieldnames)
         if unknown_fields:
             raise ValueError(
                 "Unknown result fields: {}".format(
                     ", ".join(sorted(unknown_fields))
                 )
             )
-        row = {field: result.get(field) for field in CSV_FIELDS}
+        row = {field: result.get(field) for field in self.fieldnames}
         with self.csv_path.open("a", encoding="utf-8", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS)
+            writer = csv.DictWriter(handle, fieldnames=self.fieldnames)
             writer.writerow(row)
             handle.flush()
             os.fsync(handle.fileno())

@@ -1,0 +1,39 @@
+experiment:
+  name: 2dgs_scaffold_anchor_30000
+  output_root: output/ablations/scaffold_anchor/2dgs
+  results_file: research_results/2dgs_scaffold_anchor_results.csv
+
+initialization:
+  method: scaffold_anchor
+
+scaffold:
+  enabled: true
+  repo_path: external/Scaffold-GS
+  python_executable: null
+  iterations: 30000
+  resolution: 1
+  eval: true
+  reuse_successful: true
+  output_root: output/ablations/scaffold_anchor/scaffold
+
+training:
+  iterations: 30000
+
+geometry_evaluation:
+  enabled: false
+  distance_threshold: null
+  sample_points: 100000
+
+metrics:
+  chamfer_distance: false
+  precision: false
+  recall: false
+  f1_score: false
+  ssim: true
+  psnr: true
+  lpips: true
+
+monitoring:
+  training_time: true
+  gpu_vram: true
+  gpu_sampling_interval_seconds: 0.5

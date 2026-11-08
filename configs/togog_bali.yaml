@@ -1,12 +1,72 @@
 dataset_name: TogogBali
 
 scenes:
-  - name: togog_ganesha
-    source: datasets/togog_bali/togog_ganesha
-    ground_truth: ground_truth/togog_bali/togog_ganesha.ply
-    output: output/togog_bali/togog_ganesha
+  - name: dewa_brahma
+    source: datasets/togog_bali/dewa_brahma
+    ground_truth: ground_truth/togog_bali/dewa_brahma.ply
+    output: output/togog_bali/dewa_brahma
 
-  - name: togog_siwa
-    source: datasets/togog_bali/togog_siwa
-    ground_truth: ground_truth/togog_bali/togog_siwa.ply
-    output: output/togog_bali/togog_siwa
+  - name: dewa_sambhu
+    source: datasets/togog_bali/dewa_sambhu
+    ground_truth: ground_truth/togog_bali/dewa_sambhu.ply
+    output: output/togog_bali/dewa_sambhu
+
+  - name: dewi_gangga
+    source: datasets/togog_bali/dewi_gangga
+    ground_truth: ground_truth/togog_bali/dewi_gangga.ply
+    output: output/togog_bali/dewi_gangga
+
+  - name: ganesha
+    source: datasets/togog_bali/ganesha
+    ground_truth: ground_truth/togog_bali/ganesha.ply
+    output: output/togog_bali/ganesha
+
+  - name: merdah
+    source: datasets/togog_bali/merdah
+    ground_truth: ground_truth/togog_bali/merdah.ply
+    output: output/togog_bali/merdah
+
+  - name: ngawasari
+    source: datasets/togog_bali/ngawasari
+    ground_truth: ground_truth/togog_bali/ngawasari.ply
+    output: output/togog_bali/ngawasari
+
+  - name: om_swastyastu_luh
+    source: datasets/togog_bali/om_swastyastu_luh
+    ground_truth: ground_truth/togog_bali/om_swastyastu_luh.ply
+    output: output/togog_bali/om_swastyastu_luh
+
+  - name: om_swastyastu_muani
+    source: datasets/togog_bali/om_swastyastu_muani
+    ground_truth: ground_truth/togog_bali/om_swastyastu_muani.ply
+    output: output/togog_bali/om_swastyastu_muani
+
+  - name: paksi_singa
+    source: datasets/togog_bali/paksi_singa
+    ground_truth: ground_truth/togog_bali/paksi_singa.ply
+    output: output/togog_bali/paksi_singa
+
+  - name: penabuh_cengceng
+    source: datasets/togog_bali/penabuh_cengceng
+    ground_truth: ground_truth/togog_bali/penabuh_cengceng.ply
+    output: output/togog_bali/penabuh_cengceng
+
+  - name: penabuh_gangsa
+    source: datasets/togog_bali/penabuh_gangsa
+    ground_truth: ground_truth/togog_bali/penabuh_gangsa.ply
+    output: output/togog_bali/penabuh_gangsa
+
+  - name: rangda
+    source: datasets/togog_bali/rangda
+    ground_truth: ground_truth/togog_bali/rangda.ply
+    output: output/togog_bali/rangda
+
+  - name: tualen
+    source: datasets/togog_bali/tualen
+    ground_truth: ground_truth/togog_bali/tualen.ply
+    output: output/togog_bali/tualen
+
+  - name: detya
+    source: datasets/togog_bali/detya
+    ground_truth: ground_truth/togog_bali/detya.ply
+    output: output/togog_bali/detya
