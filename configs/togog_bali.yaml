@@ -70,3 +70,18 @@ scenes:
     source: datasets/togog_bali/detya
     ground_truth: ground_truth/togog_bali/detya.ply
     output: output/togog_bali/detya
+
+  - name: anggada
+    source: datasets/togog_bali/anggada
+    ground_truth: ground_truth/togog_bali/anggada.ply
+    output: output/togog_bali/anggada
+
+  - name: hanoman
+    source: datasets/togog_bali/hanoman
+    ground_truth: ground_truth/togog_bali/hanoman.ply
+    output: output/togog_bali/hanoman
+
+  - name: dewi_saraswati
+    source: datasets/togog_bali/dewi_saraswati
+    ground_truth: ground_truth/togog_bali/dewi_saraswati.ply
+    output: output/togog_bali/dewi_saraswati
